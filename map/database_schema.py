@@ -148,10 +148,10 @@ class DetectionDatabase:
     
         districts = []
         for row in cursor.fetchall():
-            districts.append({
-                'name': row[0],
-                'latitude': row[1],
-                'longitude': row[2]
-            })
-        
+         districts.append({
+            'name': row[0],
+            'latitude': row[1],
+            'longitude': row[2]
+        })
+    
         return districts
