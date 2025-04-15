@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fall Armyworm Detection Map - Uganda</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 15px;
+            text-align: center;
+        }
+        .container {
+            display: flex;
+            height: calc(100vh - 50px);
+        }
+        #map {
+            flex: 3;
+            height: 100%;
+        }
+        #sidebar {
+            flex: 1;
+            padding: 20px;
+            background-color: #f5f5f5;
+            overflow-y: auto;
+            min-width: 300px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        select, input[type="file"], button {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+        }
+        button {
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #2ecc71;
+        }
+        .legend {
+            background-color: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+            margin-top: 20px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border-radius: 50%;
+        }
+        #result-container {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: white;
+            display: none;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 2s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <h1>Fall Armyworm Detection Map - Uganda</h1>
+    </div>
+    
+    <div class="container">
+        <div id="map"></div>
+        
+        <div id="sidebar">
+            <h2>Report Fall Armyworm</h2>
+            <form id="detection-form">
+                <div class="form-group">
+                    <label for="district">Select Your District:</label>
+                    <select id="district" name="district" required>
+                        <option value="">-- Select District --</option>
+                        <!-- Districts will be loaded dynamically -->
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="image">Upload Maize Leaf Image:</label>
+                    <input type="file" id="image" name="image" accept="image/*" required>
+                </div>
+                
+                <button type="submit">Detect Fall Armyworm</button>
+            </form>
+            
+            <div id="loader" class="loader"></div>
+            
+            <div id="result-container">
+                <h3>Detection Result</h3>
+                <p id="result-text"></p>
+                <p id="result-description"></p>
+                <p id="result-confidence"></p>
+            </div>
+            
+            <div class="legend">
+                <h3>Map Legend</h3>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #e74c3c;"></div>
+                    <span>Larval Damage</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #f39c12;"></div>
+                    <span>Eggs</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #3498db;"></div>
+                    <span>Frass</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #2ecc71;"></div>
+                    <span>Healthy Maize</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #2ecc71;"></div>
+                    <span>Healthy Maize</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #95a5a6;"></div>
+                    <span>Unknown</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        // Initialize the map centered on Uganda
+        const map = L.map('map').setView([1.3733, 32.2903], 7);
+        
+        // Add OpenStreetMap tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        
+        // Define marker colors for different detection types
+        const markerColors = {
+            'fall-armyworm-larval-damage': '#e74c3c',
+            'fall-armyworm-egg': '#f39c12',
+            'fall-armyworm-frass': '#3498db',
+            'healthy-maize': '#2ecc71',
+            'unknown': '#95a5a6'
+        };
+        
+        // Store markers for later reference
+        const markers = {};
+        
+        // Load districts for the dropdown
+        fetch('/api/districts')
+            .then(response => response.json())
+            .then(districts => {
+                const districtSelect = document.getElementById('district');
+                
+                districts.forEach(district => {
+                    const option = document.createElement('option');
+                    option.value = district.name;
+                    option.textContent = district.name;
+                    districtSelect.appendChild(option);
+                });
+            })
+            .catch(error => console.error('Error loading districts:', error));
+        
+        // Load detection data and display on map
+        function loadDetections() {
+            fetch('/api/detections')
+                .then(response => response.json())
+                .then(detections => {
+                    // Clear existing markers
+                    Object.values(markers).forEach(marker => map.removeLayer(marker));
+                    
+                    // Add new markers
+                    detections.forEach(detection => {
+                        const color = markerColors[detection.detection_type] || markerColors.unknown;
+                        
+                        // Create custom icon
+                        const icon = L.divIcon({
+                            className: 'custom-marker',
+                            html: `<div style="background-color: ${color}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white;"></div>`,
+                            iconSize: [24, 24],
+                            iconAnchor: [12, 12]
+                        });
+                        
+                        // Create marker
+                        const marker = L.marker([detection.latitude, detection.longitude], { icon: icon })
+                            .addTo(map);
+                        
+                        // Create popup content
+                        let detectionTypeDisplay = 'Unknown';
+                        if (detection.detection_type === 'fall-armyworm-larval-damage') {
+                            detectionTypeDisplay = 'Larval Damage';
+                        } else if (detection.detection_type === 'fall-armyworm-egg') {
+                            detectionTypeDisplay = 'Eggs';
+                        } else if (detection.detection_type === 'fall-armyworm-frass') {
+                            detectionTypeDisplay = 'Frass';
+                        } else if (detection.detection_type === 'healthy-maize') {
+                            detectionTypeDisplay = 'Healthy Maize';
+                        }
+                        
+                        const popupContent = `
+                            <strong>District:</strong> ${detection.district}<br>
+                            <strong>Detection:</strong> ${detectionTypeDisplay}<br>
+                            <strong>Confidence:</strong> ${Math.round(detection.confidence * 100)}%<br>
+                            <strong>Date:</strong> ${new Date(detection.timestamp).toLocaleString()}
+                        `;
+                        
+                        marker.bindPopup(popupContent);
+                        
+                        // Store marker reference
+                        markers[detection.district] = marker;
+                    });
+                })
+                .catch(error => console.error('Error loading detections:', error));
+        }
+        
+        // Load initial detection data
+        loadDetections();
+        
+        // Handle form submission
+        document.getElementById('detection-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            
+            const form = this;
+            const formData = new FormData(form);
+            const resultContainer = document.getElementById('result-container');
+            const resultText = document.getElementById('result-text');
+            const resultDescription = document.getElementById('result-description');
+            const resultConfidence = document.getElementById('result-confidence');
+            const loader = document.getElementById('loader');
+            
+            // Show loader
+            loader.style.display = 'block';
+            resultContainer.style.display = 'none';
+            
+            // Submit form data
+            fetch('/api/detect', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(result => {
+                // Hide loader
+                loader.style.display = 'none';
+                
+                // Display result
+                resultText.textContent = result.result;
+                resultDescription.textContent = result.description;
+                resultConfidence.textContent = `Confidence: ${result.confidence}%`;
+                resultContainer.style.display = 'block';
+                
+                // Reload detection data to update map
+                loadDetections();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                loader.style.display = 'none';
+                resultText.textContent = 'Error processing image';
+                resultDescription.textContent = 'Please try again.';
+                resultConfidence.textContent = '';
+                resultContainer.style.display = 'block';
+            });
+        });
+    </script>
+</body>
+</html>
