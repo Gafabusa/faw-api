@@ -35,10 +35,7 @@ htmlcov/
 logs/
 # Uploaded images and temporary files
 temp_*
-*.jpg
-*.jpeg
-*.png
-*.gif
+
 temp_image.jpg
 # Environment variables
 .env
